@@ -1,0 +1,160 @@
+P16 assembler v1.3.2 (May  7 2020)	umull32.lst	Sun Oct 16 03:13:33 2022
+
+Sections
+Index   Name            Addresses       Size
+0       .text           0000 - 00A7     00A8 168
+
+Symbols
+Name                    Type      Value      Section
+end_if                  LABEL     006A 106   .text
+end_loop_mull           LABEL     0090 144   .text
+for_loop_mull           LABEL     002A 42    .text
+if_2                    LABEL     005E 94    .text
+line#144                LABEL     00A6 166   .text
+umull32                 LABEL     0000 0     .text
+
+Code listing
+   1           	; Rotina:    umull32 ----------------------------------------------------------
+   2           	; Descricao:
+   3           	; Entradas:  M = R0..R1, m = R2..R3
+   4           	; Saidas: 	 p = R0..R1
+   5           	; Efeitos:
+   6           	
+   7           	umull32:
+   8           		; save used registers in stack ------------------------
+   9           		;push	LR
+  10 0000 04 24		push  	R4							; 0x0000 in the op p >> 1 to adc to the next part of the number
+  11 0002 05 24		push  	R5							; i
+  12 0004 06 24		push    R6							; M (LSB)
+  13 0006 07 24		push  	R7  						; M (MSB)
+  14 0008 09 24		push  	R9   						; p (LSB_0)
+  15 000A 08 24		push  	R8							; p_1
+  16 000C 0A 24		push    R10							; p (LSB_1)
+  17 000E 0B 24		push    R11							; p (MSB_0)
+  18 0010 0C 24		push  	R12							; p (MSB_1)
+  19           	
+  20           		; tranfer M to R7..R6 ---------------------------------
+  21 0012 06 B0		mov 	R6, R0 						; R0 = M (LSB)
+  22 0014 87 B0		mov  	R7, R1						; R1 = M (MSB) 
+  23           	
+  24           		; assign p = m (64b) ----------------------------------
+  25 0016 09 B1		mov   	R9, R2 						; R2 = m (LSB)
+  26 0018 8A B1		mov  	R10, R3						; R3 = m (MSB)
+  27 001A 0B 60		mov   	R11, #0x00 & 0xFF			; fill the remaining MSB of 32b with 0x0000
+  28 001C 0B 70		movt   	R11, #(0x00 >> 8) & 0xFF    
+  29 001E 0C 60		mov   	R12, #0x00 & 0xFF
+  30 0020 0C 70		movt   	R12, #(0x00 >> 8) & 0xFF
+  31           	
+  32           		; assign p_1 = 0 --------------------------------------
+  33 0022 08 60		mov  	R8, #0x00 & 0xFF
+  34 0024 08 70		movt  	R8, #(0x00 >> 8) & 0xFF
+  35           	
+  36           		; assign i = 0 ----------------------------------------
+  37 0026 05 60		mov  	R5, #0x00 & 0xFF
+  38 0028 05 70		movt  	R5, #(0x00 >> 8) & 0xFF
+  39           		
+  40           	
+  41           		; for loop ============================================
+  42           	for_loop_mull:
+  43           	
+  44           		; assign R0 with 0x0000 -------------------------------
+  45 002A 00 60		mov  	R0, 0x00 & 0xFF
+  46 002C 00 70		movt   	R0, #(0x00 >> 8) & 0xFF
+  47           	
+  48           		; assign R1 with 0x0001 -------------------------------
+  49 002E 11 60		mov  	R1, 0x01 & 0xFF
+  50 0030 01 70		movt   	R1, #(0x00 >> 8) & 0xFF
+  51           	
+  52           		; assign R2 with 32 (0x0020) ----------------------------
+  53 0032 02 62		mov   	R2, #0x20 & 0xFF
+  54 0034 02 70		movt 	R2, #(0x00 >> 8) & 0xFF 
+  55           	
+  56           		; if (i >= 32) break loop -----------------------------
+  57 0036 50 B9		cmp 	R5, R2							; R5 = i, R2 = 32 (0x0020)
+  58 0038 2B 4C		bhs 	end_loop_mull	
+  59           	
+  60           		; don't enter if parts in case p MSBs != 0 ------------
+  61 003A 05 B5		mov   	R5, R10							; R10 = p (LSB_1) 
+  62 003C 50 B8		cmp 	R5, R0							; R0 = 0x0000
+  63 003E 15 44		bne 	end_if
+  64           	
+  65 0040 85 B5		mov     R5, R11							; R11 = p (MSB_0)
+  66 0042 50 B8		cmp  	R5, R0							; R0 = 0x0000
+  67 0044 12 44		bne  	end_if
+  68           	
+  69 0046 05 B6		mov     R5, R12							; R12 = p (MSB_1)
+  70 0048 50 B8		cmp  	R5, R0							; R0 = 0x0000
+  71 004A 0F 44		bne  	end_if
+  72           	
+  73           		; if ((p & 0x1) == 0 && p_1 == 1) ---------------------
+  74 004C 84 B4		mov  	R4, R9							; R9 = p (LSB_0) 
+  75 004E C5 C0		and  	R5, R4, R1 						; R9 (LSB of p) & (R1 = 0x0001)
+  76 0050 50 B8		cmp  	R5, R0							; R5 = (p & 0x1), R0 = 0x0000 
+  77 0052 05 44		bne 	if_2
+  78 0054 04 B4		mov  	R4, R8							; R8 = p_1
+  79 0056 C0 B8		cmp   	R4, R1							; R4 = p_1, R1 = 0x0001
+  80 0058 08 44		bne		end_if
+  81           	
+  82           		; sum M to p (32 MSB) ---------------------------------
+  83 005A EB 85		add 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
+  84 005C 7C 96		adc     R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
+  85           	
+  86           		; if ((p & 0x1) == 1 && p_1 = 0) ----------------------
+  87           	if_2:
+  88 005E D0 B8		cmp 	R5, R1   						; R5 = (p & 0x1), R4 = 0x01
+  89 0060 04 44	 	bne 	end_if
+  90 0062 40 B8		cmp  	R4, R0							; R4 = p_1, R0 = 0x0000
+  91 0064 02 44		bne		end_if
+  92           	
+  93           		; sub M to p (32 MSB) ---------------------------------
+  94 0066 EB 8D		sub 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
+  95 0068 7C 9E		sbc  	R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
+  96           	
+  97           	end_if:
+  98           		; p_1 = p & 0x1 ---------------------------------------
+  99 006A 88 B2		mov 	R8, R5							; R8 = p_1, R5 = p & 0x0001
+ 100           		
+ 101           		; p >>= 1, need to move p to R3..R0 so we can do the shift
+ 102 006C 80 B4		mov     R0, R9							; R9 = p (LSB_0)			
+ 103 006E 01 B5		mov     R1, R10							; R10 = p (LSB_1)
+ 104 0070 82 B5		mov     R2, R11 						; R11 = p (MSB_0)
+ 105 0072 03 B6		mov     R3, R12							; R12 = p (MSB_1)
+ 106           	
+ 107 0074 04 60		mov 	R4, #0x00 & 0xFF                ; R4 = 0x0000 to use in adc
+ 108 0076 04 70		movt 	R4, #(0x00 >> 8) & 0xFF     
+ 109           		
+ 110           		; make the shift right by 1 ---------------------------
+ 111 0078 B3 E8		lsr  	R3, R3, #1
+ 112 007A 22 92		adc 	R2, R2, R4
+ 113 007C A2 E8		lsr  	R2, R2, #1
+ 114 007E 11 92		adc     R1, R1, R4
+ 115 0080 91 E8		lsr  	R1, R1, #1
+ 116 0082 00 92		adc  	R0, R0, R4
+ 117 0084 80 E8		lsr  	R0, R0, #1
+ 118           	
+ 119           		; move back p to R12..R9 -----------------------------
+ 120 0086 09 B0		mov     R9, R0							; R0 = p (LSB_0)		
+ 121 0088 8A B0		mov     R10, R1							; R1 = p (LSB_1)
+ 122 008A 0B B1		mov     R11, R2 						; R2 = p (MSB_0)
+ 123 008C 8C B1		mov     R12, R3 						; R3 = p (MSB_1)
+ 124           	
+ 125 008E CD 5B		b  		for_loop_mull
+ 126           	
+ 127           	end_loop_mull:
+ 128           		; move p (LSB) to R1..R0, only need the 32b part of p -
+ 129 0090 80 B4		mov     R0, R9 							; R9 = p (LSB_0)			
+ 130 0092 01 B5		mov     R1, R10 						; R10 = p (LSB_1)
+ 131           	
+ 132           		; restore used registers from stack -------------------
+ 133 0094 0C 04		pop  	R12
+ 134 0096 0B 04		pop  	R11
+ 135 0098 0A 04		pop  	R10
+ 136 009A 09 04		pop  	R9
+ 137 009C 08 04		pop 	R8
+ 138 009E 07 04		pop  	R7
+ 139 00A0 06 04		pop  	R6
+ 140 00A2 05 04		pop  	R5
+ 141 00A4 04 04		pop  	R4
+ 142           		;pop		PC
+ 143           	
+ 144 00A6 FF 5B		b .

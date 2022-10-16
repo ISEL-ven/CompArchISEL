@@ -1,0 +1,404 @@
+P16 assembler v1.3.2 (May  7 2020)	ac1.lst	Sun Oct 16 03:12:32 2022
+
+Sections
+Index   Name            Addresses       Size
+0       .startup        0000 - 0009     000A 10
+1       .text           000A - 012F     0126 294
+2       .data           0130 - 0145     0016 22
+3       .bss            0146 - 0147     0002 2
+4       .stack          0148 - 0187     0040 64
+
+Symbols
+Name                    Type      Value      Section
+_start                  LABEL     0002 2     .startup
+end_if                  LABEL     00F2 242   .text
+end_loop                LABEL     0038 56    .text
+end_loop_mull           LABEL     0118 280   .text
+for_loop                LABEL     0020 32    .text
+for_loop_mull           LABEL     00B2 178   .text
+if_2                    LABEL     00E6 230   .text
+main                    LABEL     000A 10    .text
+main_addr               LABEL     0008 8     .startup
+N                       ABSOLUTE  000A 10    .startup
+rand                    LABEL     004A 74    .text
+RAND_MAX                ABSOLUTE  FFFF 65535 .startup
+rand_number             LABEL     0146 326   .bss
+rand_number_addr        LABEL     003C 60    .text
+result                  LABEL     0132 306   .data
+result_addr             LABEL     003E 62    .text
+SEED                    ABSOLUTE  0001 1     .startup
+seed                    LABEL     0130 304   .data
+seed_addr               LABEL     0084 132   .text
+SEED_MULTIPLIER         ABSOLUTE  343FD 214013.startup
+SEED_SUMMAND            ABSOLUTE  269EC3 2531011.startup
+srand                   LABEL     0040 64    .text
+SRAND_VAL_H             ABSOLUTE  0015 21    .startup
+SRAND_VAL_L             ABSOLUTE  002F 47    .startup
+STACK_SIZE              ABSOLUTE  0040 64    .startup
+tos                     LABEL     0188 392   .stack
+tos_addr                LABEL     0006 6     .startup
+umull32                 LABEL     0086 134   .text
+
+Code listing
+   1           	; Ficheiro:  .S
+   2           	; Descricao: Programa de suporte a realizacao do 1o trabalho prático de
+   3           	;            Arquitetura de Computadores.
+   4           	
+   5           	; Autor:     47190 Ana Gaspar
+   6           	;    		 45837 Miguel Santos
+   7           	;	    	 45824 Nuno Venâncio
+   8           	;	   			
+   9           	; Data:      05-10-2022
+  10           	
+  11           	
+  12           	; Definicao dos valores dos simbolos utilizados no programa ===================
+  13           	
+  14          	.equ	STACK_SIZE, 64				; Dimensao do stack - 64B (16b x 10), we push 9 registers in umull32
+  15          	.equ	N, 10
+  16          	.equ	SRAND_VAL_L, 0x2F  			; 5434 = 0x152F
+  17          	.equ	SRAND_VAL_H, 0x15
+  18          	.equ 	RAND_MAX, 0xFFFF
+  19          	.equ 	SEED_MULTIPLIER, 214013
+  20          	.equ	SEED_SUMMAND, 2531011
+  21          	.equ	SEED, 1
+  22           	; =============================================================================
+  23           	
+  24           	
+  25           	; Section:    .startup ========================================================
+  26           	; Descricao: Guarda o código de arranque do sistema
+  27           	
+  28           		.section .startup
+  29 0000 00 58		b		_start
+  30           	
+  31           	_start:
+  32 0002 1D 0C		ldr		SP, tos_addr		; set SP (stack pointer) to begining of stack addr
+  33 0004 1F 0C		ldr		PC, main_addr		; set PC (prog counter) to begining of main addr
+  34           	
+  35           	tos_addr:
+  36 0006 88 01		.word	tos
+  37           	
+  38           	main_addr:
+  39 0008 0A 00		.word	main
+  40           	
+  41           	; =============================================================================
+  42           	
+  43           	; Section:    .text ===========================================================
+  44           	; Descricao: Guarda o código do programa
+  45           	
+  46           		.section .text
+  47           	
+  48           	; Rotina:    main -------------------------------------------------------------
+  49           	; Descricao:
+  50           	; Entradas:  none
+  51           	; Saidas:	 none
+  52           	; Efeitos:
+  53           	
+  54           	main:
+  55           		; save used registers in stack 
+  56 000A 04 24		push 	R4
+  57 000C 05 24		push 	R5
+  58           	
+  59           		; don't need the error vaiable, we can break directly in the for_loop
+  60           		; if rand_number != result[i] 
+  61           		;mov 	R4, #0 					; error
+  62 000E 64 0D		ldr 	R4, rand_number_addr 	; get rand_number mem addr
+  63 0010 44 00		ldr 	R4, [R4, #0] 			; get the value in rand_number mem addr
+  64 0012 05 60		mov  	R5, #0 & 0xFF 			; i (lsb)
+  65 0014 05 70		movt	R5, #( 0 >> 8) & 0xFF 	; i (msb)
+  66           	
+  67           		; get srand parameter to R0..R1, 5423 = 0x152F
+  68 0016 F0 62		mov  	R0, SRAND_VAL_L & 0xFF
+  69 0018 00 70		movt  	R0, #( SRAND_VAL_L >> 8 ) & 0xFF
+  70 001A 51 61		mov  	R1, SRAND_VAL_H & 0xFF
+  71 001C 01 70		movt  	R1, #( SRAND_VAL_H >> 8 ) & 0xFF
+  72           	
+  73 001E 10 5C		bl  	srand 					; call to srand, nseed is in R0..R1
+  74           	
+  75           	for_loop:
+  76           		; check if i < N
+  77 0020 A0 60		mov  	R0, N & 0xFF
+  78 0022 00 70		movt	R0, (0 >> 8) & 0xFF
+  79 0024 80 BA		cmp  	R0, R5
+  80 0026 08 4C		bhs     end_loop
+  81           	
+  82           		; rand_number = rand(), return will be in mem val of seed
+  83 0028 10 5C		bl 		rand
+  84 002A 40 68		mov  	R0, #seed_addr
+  85 002C 00 00		ldr  	R0, [R0, #0]
+  86 002E 40 20		str  	R0, [R4, #0]			; maybe wrong
+  87           	
+  88           		; if rand_number == result[i] -> brach for_loop, rand_number is in R4
+  89 0030 60 0C		ldr  	R0, result_addr
+  90 0032 80 12		ldr 	R0, [R0, R5]
+  91 0034 00 BA		cmp 	R0, R4
+  92 0036 F4 43		beq  	for_loop
+  93           	
+  94           	end_loop:
+  95           	
+  96           		; restore used registers from stack
+  97 0038 05 04		pop		R5
+  98 003A 04 04		pop		R4
+  99           	
+ 100           	rand_number_addr:
+ 101 003C 46 01		.word rand_number
+ 102           	
+ 103           	result_addr:
+ 104 003E 32 01		.word result
+ 105           	
+ 106           	
+ 107           	; Rotina:    srand ------------------------------------------------------------
+ 108           	; Descricao:
+ 109           	; Entradas:  nseed in R0..R1
+ 110           	; Saidas:	 none
+ 111           	; Efeitos:
+ 112           	
+ 113           	srand:
+ 114           		; think this routine is unecessary could be done directly on main 
+ 115           		; R0 - LSbits of nseed, R1 - MSbits of nseed 
+ 116 0040 0E 24		push	LR
+ 117           	
+ 118 0042 02 0E		ldr		R2, seed_addr			; get seed mem addr
+ 119 0044 20 20		str		R0, [R2, #0]			; get the value in seed mem addr (LSbits)
+ 120 0046 A1 20		str		R1, [R2, #2]			; get the value in seed mem addr (MSbits)
+ 121           		
+ 122 0048 0F 04		pop		PC
+ 123           	
+ 124           	
+ 125           	; Rotina:    rand -------------------------------------------------------------
+ 126           	; Descricao:
+ 127           	; Entradas:  
+ 128           	; Saidas:
+ 129           	; Efeitos:
+ 130           	
+ 131           	rand:
+ 132           		; save used registers in stack 
+ 133 004A 0E 24		push	LR
+ 134 004C 04 24		push 	R4
+ 135 004E 05 24		push 	R5
+ 136 0050 06 24		push 	R6
+ 137           	
+ 138 0052 80 0D		ldr		R0, seed_addr 			; get seed mem addr
+ 139 0054 00 00		ldr		R0, [R0, #0]            ; get the value in seed mem addr (LSbits)
+ 140 0056 81 00		ldr		R1, [R0, #2]			; get the value in seed mem addr (MSbits)
+ 141           	
+ 142           		; move seed multiplier (32bits) to R2..R3
+ 143 0058 D2 6F		mov		R2, #SEED_MULTIPLIER & 0xFF
+ 144 005A 32 74		movt	R2, #( SEED_MULTIPLIER >> 8 ) & 0xFF
+ 145 005C 33 60		mov 	R3, #( SEED_MULTIPLIER >> 16 ) & 0xFF
+ 146 005E 03 70		movt	R3, #( SEED_MULTIPLIER >> 24 ) & 0xFF
+ 147           	
+ 148 0060 12 5C		bl		umull32					; return will come in R0..R3
+ 149           	
+ 150           		; move SEED_SOMMAND (32bits) to R4..R5
+ 151 0062 34 6C		mov		R4, #(SEED_SUMMAND & 0xFF)
+ 152 0064 E4 79		movt	R4, #(( SEED_SUMMAND >> 8 ) & 0xFF)
+ 153 0066 65 62		mov 	R5, #(( SEED_SUMMAND >> 16 ) & 0xFF)
+ 154 0068 05 70		movt	R5, #(( SEED_SUMMAND >> 24 ) & 0xFF)
+ 155           	
+ 156           		; sum SEED_SOMMAND (32bits) to umull32 resul (64bits)
+ 157 006A 06 60		mov 	R6, #0x00 		; adc doesnt support #0
+ 158 006C 06 70		movt  	R6, #0x00
+ 159 006E 00 82		add 	R0, R0, R4
+ 160 0070 91 92		adc		R1, R1, R5
+ 161 0072 22 93		adc 	R2, R2, R6
+ 162 0074 33 93		adc		R3, R3, R6
+ 163           	
+ 164           		; calculate modulus with RAND_MAX
+ 165           		; (number can't pass RAND_MAX, 64bits shrink to 32bits)
+ 166           		; https://stackoverflow.com/questions/42938673/how-to-do-the-modulo-operation-in-arm-assembly
+ 167           		; i think we can do nothing and get only the lower part (32bit) of the 64 bits value which is in R0..R1
+ 168           	
+ 169           	
+ 170           		; store seed in mem rigth shifted by 16
+ 171           		; i think rsh 16 is the same to mov the value from R0 to R1 and then mov #0 to R0
+ 172 0076 01 B0		mov 	R1, R0
+ 173 0078 00 60		mov 	R0, #0 & 0xFF
+ 174 007A 00 70		movt    R0, #( 0 >> 8) & 0xFF
+ 175           	
+ 176           		; restore used registers from stack
+ 177 007C 06 04		pop		R6
+ 178 007E 05 04		pop		R5
+ 179 0080 04 04		pop		R4
+ 180 0082 0F 04		pop		PC
+ 181           	
+ 182           	seed_addr:
+ 183 0084 30 01		.word seed
+ 184           	
+ 185           	
+ 186           	; Rotina:    umull32 ----------------------------------------------------------
+ 187           	; Descricao:
+ 188           	; Entradas:  M = R0..R1, m = R2..R3
+ 189           	; Saidas: 	 p = R0..R1
+ 190           	; Efeitos:
+ 191           	
+ 192           	umull32:
+ 193           		; save used registers in stack ------------------------
+ 194 0086 0E 24		push	LR
+ 195 0088 04 24		push  	R4							; 0x0000 in the op p >> 1 to adc to the next part of the number
+ 196 008A 05 24		push  	R5							; i
+ 197 008C 06 24		push    R6							; M (LSB)
+ 198 008E 07 24		push  	R7  						; M (MSB)
+ 199 0090 09 24		push  	R9   						; p (LSB_0)
+ 200 0092 08 24		push  	R8							; p_1
+ 201 0094 0A 24		push    R10							; p (LSB_1)
+ 202 0096 0B 24		push    R11							; p (MSB_0)
+ 203 0098 0C 24		push  	R12							; p (MSB_1)
+ 204           	
+ 205           		; tranfer M to R7..R6 ---------------------------------
+ 206 009A 06 B0		mov 	R6, R0 						; R0 = M (LSB)
+ 207 009C 87 B0		mov  	R7, R1						; R1 = M (MSB) 
+ 208           	
+ 209           		; assign p = m (64b) ----------------------------------
+ 210 009E 09 B1		mov   	R9, R2 						; R2 = m (LSB)
+ 211 00A0 8A B1		mov  	R10, R3						; R3 = m (MSB)
+ 212 00A2 0B 60		mov   	R11, #0x00 & 0xFF			; fill the remaining MSB of 32b with 0x0000
+ 213 00A4 0B 70		movt   	R11, #(0x00 >> 8) & 0xFF    
+ 214 00A6 0C 60		mov   	R12, #0x00 & 0xFF
+ 215 00A8 0C 70		movt   	R12, #(0x00 >> 8) & 0xFF
+ 216           	
+ 217           		; assign p_1 = 0 --------------------------------------
+ 218 00AA 08 60		mov  	R8, #0x00 & 0xFF
+ 219 00AC 08 70		movt  	R8, #(0x00 >> 8) & 0xFF
+ 220           	
+ 221           		; assign i = 0 ----------------------------------------
+ 222 00AE 05 60		mov  	R5, #0x00 & 0xFF
+ 223 00B0 05 70		movt  	R5, #(0x00 >> 8) & 0xFF
+ 224           		
+ 225           	
+ 226           		; for loop ============================================
+ 227           	for_loop_mull:
+ 228           	
+ 229           		; assign R0 with 0x0000 -------------------------------
+ 230 00B2 00 60		mov  	R0, 0x00 & 0xFF
+ 231 00B4 00 70		movt   	R0, #(0x00 >> 8) & 0xFF
+ 232           	
+ 233           		; assign R1 with 0x0001 -------------------------------
+ 234 00B6 11 60		mov  	R1, 0x01 & 0xFF
+ 235 00B8 01 70		movt   	R1, #(0x00 >> 8) & 0xFF
+ 236           	
+ 237           		; assign R2 with 32 (0x0020) ----------------------------
+ 238 00BA 02 62		mov   	R2, #0x20 & 0xFF
+ 239 00BC 02 70		movt 	R2, #(0x00 >> 8) & 0xFF 
+ 240           	
+ 241           		; if (i >= 32) break loop -----------------------------
+ 242 00BE 50 B9		cmp 	R5, R2							; R5 = i, R2 = 32 (0x0020)
+ 243 00C0 2B 4C		bhs 	end_loop_mull	
+ 244           	
+ 245           		; don't enter if parts in case p MSBs != 0 ------------
+ 246 00C2 05 B5		mov   	R5, R10							; R10 = p (LSB_1) 
+ 247 00C4 50 B8		cmp 	R5, R0							; R0 = 0x0000
+ 248 00C6 15 44		bne 	end_if
+ 249           	
+ 250 00C8 85 B5		mov     R5, R11							; R11 = p (MSB_0)
+ 251 00CA 50 B8		cmp  	R5, R0							; R0 = 0x0000
+ 252 00CC 12 44		bne  	end_if
+ 253           	
+ 254 00CE 05 B6		mov     R5, R12							; R12 = p (MSB_1)
+ 255 00D0 50 B8		cmp  	R5, R0							; R0 = 0x0000
+ 256 00D2 0F 44		bne  	end_if
+ 257           	
+ 258           		; if ((p & 0x1) == 0 && p_1 == 1) ---------------------
+ 259 00D4 84 B4		mov  	R4, R9							; R9 = p (LSB_0) 
+ 260 00D6 C5 C0		and  	R5, R4, R1 						; R9 (LSB of p) & (R1 = 0x0001)
+ 261 00D8 50 B8		cmp  	R5, R0							; R5 = (p & 0x1), R0 = 0x0000 
+ 262 00DA 05 44		bne 	if_2
+ 263 00DC 04 B4		mov  	R4, R8							; R8 = p_1
+ 264 00DE C0 B8		cmp   	R4, R1							; R4 = p_1, R1 = 0x0001
+ 265 00E0 08 44		bne		end_if
+ 266           	
+ 267           		; sum M to p (32 MSB) ---------------------------------
+ 268 00E2 EB 85		add 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
+ 269 00E4 7C 96		adc     R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
+ 270           	
+ 271           		; if ((p & 0x1) == 1 && p_1 = 0) ----------------------
+ 272           	if_2:
+ 273 00E6 D0 B8		cmp 	R5, R1   						; R5 = (p & 0x1), R4 = 0x01
+ 274 00E8 04 44	 	bne 	end_if
+ 275 00EA 40 B8		cmp  	R4, R0							; R4 = p_1, R0 = 0x0000
+ 276 00EC 02 44		bne		end_if
+ 277           	
+ 278           		; sub M to p (32 MSB) ---------------------------------
+ 279 00EE EB 8D		sub 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
+ 280 00F0 7C 9E		sbc  	R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
+ 281           	
+ 282           	end_if:
+ 283           		; p_1 = p & 0x1 ---------------------------------------
+ 284 00F2 88 B2		mov 	R8, R5							; R8 = p_1, R5 = p & 0x0001
+ 285           		
+ 286           		; p >>= 1, need to move p to R3..R0 so we can do the shift
+ 287 00F4 80 B4		mov     R0, R9							; R9 = p (LSB_0)			
+ 288 00F6 01 B5		mov     R1, R10							; R10 = p (LSB_1)
+ 289 00F8 82 B5		mov     R2, R11 						; R11 = p (MSB_0)
+ 290 00FA 03 B6		mov     R3, R12							; R12 = p (MSB_1)
+ 291           	
+ 292 00FC 04 60		mov 	R4, #0x00 & 0xFF                ; R4 = 0x0000 to use in adc
+ 293 00FE 04 70		movt 	R4, #(0x00 >> 8) & 0xFF     
+ 294           		
+ 295           		; make the shift right by 1 ---------------------------
+ 296 0100 B3 E8		lsr  	R3, R3, #1
+ 297 0102 22 92		adc 	R2, R2, R4
+ 298 0104 A2 E8		lsr  	R2, R2, #1
+ 299 0106 11 92		adc     R1, R1, R4
+ 300 0108 91 E8		lsr  	R1, R1, #1
+ 301 010A 00 92		adc  	R0, R0, R4
+ 302 010C 80 E8		lsr  	R0, R0, #1
+ 303           	
+ 304           		; move back p to R12..R9 -----------------------------
+ 305 010E 09 B0		mov     R9, R0							; R0 = p (LSB_0)		
+ 306 0110 8A B0		mov     R10, R1							; R1 = p (LSB_1)
+ 307 0112 0B B1		mov     R11, R2 						; R2 = p (MSB_0)
+ 308 0114 8C B1		mov     R12, R3 						; R3 = p (MSB_1)
+ 309           	
+ 310 0116 CD 5B		b  		for_loop_mull
+ 311           	
+ 312           	end_loop_mull:
+ 313           		; move p (LSB) to R1..R0, only need the 32b part of p -
+ 314 0118 80 B4		mov     R0, R9 							; R9 = p (LSB_0)			
+ 315 011A 01 B5		mov     R1, R10 						; R10 = p (LSB_1)
+ 316           	
+ 317           		; restore used registers from stack -------------------
+ 318 011C 0C 04		pop  	R12
+ 319 011E 0B 04		pop  	R11
+ 320 0120 0A 04		pop  	R10
+ 321 0122 09 04		pop  	R9
+ 322 0124 08 04		pop 	R8
+ 323 0126 07 04		pop  	R7
+ 324 0128 06 04		pop  	R6
+ 325 012A 05 04		pop  	R5
+ 326 012C 04 04		pop  	R4
+ 327 012E 0F 04		pop		PC
+ 328           	
+ 329           	; =============================================================================
+ 330           	
+ 331           	
+ 332           	; Seccao:    .data ============================================================
+ 333           	; Descricao: Guarda as variáveis globais com um valor inicial definido
+ 334           		.section .data
+ 335           	
+ 336           	seed:
+ 337 0130 01 00		.word 0x0001
+ 338           	
+ 339           	result:
+ 340           		.word 17747, 2055, 3664, 15611, 9819, 18005, 7515, 4525, 17337, 30985
+ 340 0132 53 45 07 08 50 0E FB 3C 5B 26 55 46 5B 1D AD 11
+ 340 0142 B9 43 09 79
+ 341           	; =============================================================================
+ 342           	
+ 343           	
+ 344           	; Seccao:    .bss =============================================================
+ 345           	; Descricao: Guarda as variáveis globais sem valor inicial definido
+ 346           		.section .bss
+ 347           	
+ 348           	rand_number:
+ 349 0146 46 01		.word rand_number
+ 350           	; =============================================================================
+ 351           	
+ 352           	
+ 353           	; Seccao:    .stack ===========================================================
+ 354           	; Descricao: Implementa a pilha com o tamanho definido pelo simbolo STACK_SIZE
+ 355           	;
+ 356           		.section .stack
+ 357 0148 00   		.space	STACK_SIZE
+ 357 .... ..
+ 357 0187 00
+ 358           	tos:	

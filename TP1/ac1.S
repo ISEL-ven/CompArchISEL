@@ -11,13 +11,14 @@
 
 ; Definicao dos valores dos simbolos utilizados no programa ===================
 
-.equ	STACK_SIZE, 160				; Dimensao do stack - 160b (16b x 10), we push 9 registers in umull32
+.equ	STACK_SIZE, 64				; Dimensao do stack - 64B (16b x 10), we push 9 registers in umull32
 .equ	N, 10
 .equ	SRAND_VAL_L, 0x2F  			; 5434 = 0x152F
 .equ	SRAND_VAL_H, 0x15
 .equ 	RAND_MAX, 0xFFFF
 .equ 	SEED_MULTIPLIER, 214013
 .equ	SEED_SUMMAND, 2531011
+.equ	SEED, 1
 ; =============================================================================
 
 
@@ -42,7 +43,7 @@ main_addr:
 ; Section:    .text ===========================================================
 ; Descricao: Guarda o código do programa
 
-	.text
+	.section .text
 
 ; Rotina:    main -------------------------------------------------------------
 ; Descricao:
@@ -64,16 +65,16 @@ main:
 	movt	R5, #( 0 >> 8) & 0xFF 	; i (msb)
 
 	; get srand parameter to R0..R1, 5423 = 0x152F
-	mov  	R0, #SRAND_VAL_L & 0xFF
+	mov  	R0, SRAND_VAL_L & 0xFF
 	movt  	R0, #( SRAND_VAL_L >> 8 ) & 0xFF
-	mov  	R1, #SRAND_VAL_H & 0xFF
+	mov  	R1, SRAND_VAL_H & 0xFF
 	movt  	R1, #( SRAND_VAL_H >> 8 ) & 0xFF
 
 	bl  	srand 					; call to srand, nseed is in R0..R1
 
 for_loop:
 	; check if i < N
-	mov  	R0, #N & 0xFF
+	mov  	R0, N & 0xFF
 	movt	R0, (0 >> 8) & 0xFF
 	cmp  	R0, R5
 	bhs     end_loop
@@ -85,7 +86,7 @@ for_loop:
 	str  	R0, [R4, #0]			; maybe wrong
 
 	; if rand_number == result[i] -> brach for_loop, rand_number is in R4
-	ldr  	R0, #result_addr
+	ldr  	R0, result_addr
 	ldr 	R0, [R0, R5]
 	cmp 	R0, R4
 	beq  	for_loop
@@ -98,10 +99,10 @@ end_loop:
 
 rand_number_addr:
 	.word rand_number
-seed_addr_:
-	.word seed
+
 result_addr:
 	.word result
+
 
 ; Rotina:    srand ------------------------------------------------------------
 ; Descricao:
@@ -114,14 +115,11 @@ srand:
 	; R0 - LSbits of nseed, R1 - MSbits of nseed 
 	push	LR
 
-	ldr		R2, seed_addr 			; get seed mem addr
+	ldr		R2, seed_addr			; get seed mem addr
 	str		R0, [R2, #0]			; get the value in seed mem addr (LSbits)
 	str		R1, [R2, #2]			; get the value in seed mem addr (MSbits)
 	
 	pop		PC
-
-seed_addr_:
-	.word seed
 
 
 ; Rotina:    rand -------------------------------------------------------------
@@ -135,6 +133,7 @@ rand:
 	push	LR
 	push 	R4
 	push 	R5
+	push 	R6
 
 	ldr		R0, seed_addr 			; get seed mem addr
 	ldr		R0, [R0, #0]            ; get the value in seed mem addr (LSbits)
@@ -144,21 +143,23 @@ rand:
 	mov		R2, #SEED_MULTIPLIER & 0xFF
 	movt	R2, #( SEED_MULTIPLIER >> 8 ) & 0xFF
 	mov 	R3, #( SEED_MULTIPLIER >> 16 ) & 0xFF
-	movt	R3, #( SEED_MULTIPLIER >> 32 ) & 0xFF
+	movt	R3, #( SEED_MULTIPLIER >> 24 ) & 0xFF
 
 	bl		umull32					; return will come in R0..R3
 
 	; move SEED_SOMMAND (32bits) to R4..R5
-	mov		R4, #SEED_SOMMAND & 0xFF
-	movt	R4, #( SEED_SOMMAND >> 8 ) & 0xFF
-	mov 	R5, #( SEED_SOMMAND >> 16 ) & 0xFF
-	movt	R5, #( SEED_SOMMAND >> 32 ) & 0xFF
+	mov		R4, #(SEED_SUMMAND & 0xFF)
+	movt	R4, #(( SEED_SUMMAND >> 8 ) & 0xFF)
+	mov 	R5, #(( SEED_SUMMAND >> 16 ) & 0xFF)
+	movt	R5, #(( SEED_SUMMAND >> 24 ) & 0xFF)
 
 	; sum SEED_SOMMAND (32bits) to umull32 resul (64bits)
+	mov 	R6, #0x00 		; adc doesnt support #0
+	movt  	R6, #0x00
 	add 	R0, R0, R4
 	adc		R1, R1, R5
-	adc 	R2, R2, #0
-	adc		R3, R3, #0
+	adc 	R2, R2, R6
+	adc		R3, R3, R6
 
 	; calculate modulus with RAND_MAX
 	; (number can't pass RAND_MAX, 64bits shrink to 32bits)
@@ -173,122 +174,164 @@ rand:
 	movt    R0, #( 0 >> 8) & 0xFF
 
 	; restore used registers from stack
+	pop		R6
 	pop		R5
 	pop		R4
 	pop		PC
 
-seed_addr_:
+seed_addr:
 	.word seed
+
 
 ; Rotina:    umull32 ----------------------------------------------------------
 ; Descricao:
 ; Entradas:  M = R0..R1, m = R2..R3
-; Saidas: 	 p = R0..R3
+; Saidas: 	 p = R0..R1
 ; Efeitos:
 
 umull32:
-	; save used registers in stack 
+	; save used registers in stack ------------------------
 	push	LR
-	push  	R4						; M LSB
-	push  	R5						; M MSB
-	push    R6						; p_1
-	push  	R7  					; i
-	push  	R8   					; #32
-	push    R9						; #0
-	push    R10						; #1
-	push  	R11						; p & 0x1 in the ifs
+	push  	R4							; 0x0000 in the op p >> 1 to adc to the next part of the number
+	push  	R5							; i
+	push    R6							; M (LSB)
+	push  	R7  						; M (MSB)
+	push  	R9   						; p (LSB_0)
+	push  	R8							; p_1
+	push    R10							; p (LSB_1)
+	push    R11							; p (MSB_0)
+	push  	R12							; p (MSB_1)
 
-	; convert M to 64b, and assign p = m (64b) and p_1 = 0
-	; M64 -> R4..R7
-	mov  	R4, R0 & 0xFF
-	movt  	R4, ( R0 >> 8 ) & 0xFF
-	mov 	R5, R1 & 0xFF
-	movt  	R5, (R1 >> 8 ) & 0xFF
-	; p -> R0..R3
-	mov  	R0, #0 & 0xFF
-	movt  	R0, #( 0 >> 8 ) & 0xFF
-	mov  	R1, #0 & 0xFF
-	movt  	R1, #( 0 >> 8 ) & 0xFF
-	; p_1 -> R6
-	mov  	R6, #0
+	; tranfer M to R7..R6 ---------------------------------
+	mov 	R6, R0 						; R0 = M (LSB)
+	mov  	R7, R1						; R1 = M (MSB) 
 
-	; for loop variables preparation
-	mov 	R7, #0 & 0xFF 				; i LSB
-	movt  	R7, #( 0 >> 8 ) & 0xFF  	; i MSB
-	mov  	R8, #0x0 & 0xFF 			; #32 = 0x20 LSB(0)
-	movt 	R8, #( 0x2 >> 8 ) & 0xFF 	; #32 = 0x20 MSB(2)
-	mov  	R9, #0 & 0xFF 				; #0
-	mov 	R10, #1 & 0xFF 				; #1
+	; assign p = m (64b) ----------------------------------
+	mov   	R9, R2 						; R2 = m (LSB)
+	mov  	R10, R3						; R3 = m (MSB)
+	mov   	R11, #0x00 & 0xFF			; fill the remaining MSB of 32b with 0x0000
+	movt   	R11, #(0x00 >> 8) & 0xFF    
+	mov   	R12, #0x00 & 0xFF
+	movt   	R12, #(0x00 >> 8) & 0xFF
 
+	; assign p_1 = 0 --------------------------------------
+	mov  	R8, #0x00 & 0xFF
+	movt  	R8, #(0x00 >> 8) & 0xFF
+
+	; assign i = 0 ----------------------------------------
+	mov  	R5, #0x00 & 0xFF
+	movt  	R5, #(0x00 >> 8) & 0xFF
+	
+
+	; for loop ============================================
 for_loop_mull:
-	; if (i >= 32) break loop
-	cmp 	R7, R8
-	bhs 	end_loop_mull
 
-	; p & 0x1
-	and  	R11, R11, R10 
+	; assign R0 with 0x0000 -------------------------------
+	mov  	R0, 0x00 & 0xFF
+	movt   	R0, #(0x00 >> 8) & 0xFF
 
-	; don't enter if parts in case p MSBs != 0
-	cmp 	R1, R9
+	; assign R1 with 0x0001 -------------------------------
+	mov  	R1, 0x01 & 0xFF
+	movt   	R1, #(0x00 >> 8) & 0xFF
+
+	; assign R2 with 32 (0x0020) ----------------------------
+	mov   	R2, #0x20 & 0xFF
+	movt 	R2, #(0x00 >> 8) & 0xFF 
+
+	; if (i >= 32) break loop -----------------------------
+	cmp 	R5, R2							; R5 = i, R2 = 32 (0x0020)
+	bhs 	end_loop_mull	
+
+	; don't enter if parts in case p MSBs != 0 ------------
+	mov   	R5, R10							; R10 = p (LSB_1) 
+	cmp 	R5, R0							; R0 = 0x0000
 	bne 	end_if
-	cmp  	R2, R9
-	bne  	end_if
-	cmp  	R3, R9
+
+	mov     R5, R11							; R11 = p (MSB_0)
+	cmp  	R5, R0							; R0 = 0x0000
 	bne  	end_if
 
-	; if ((p & 0x1) == 0 && p_1 == 1)
-	cmp  	R11, R9
+	mov     R5, R12							; R12 = p (MSB_1)
+	cmp  	R5, R0							; R0 = 0x0000
+	bne  	end_if
+
+	; if ((p & 0x1) == 0 && p_1 == 1) ---------------------
+	mov  	R4, R9							; R9 = p (LSB_0) 
+	and  	R5, R4, R1 						; R9 (LSB of p) & (R1 = 0x0001)
+	cmp  	R5, R0							; R5 = (p & 0x1), R0 = 0x0000 
 	bne 	if_2
-	cmp   	R6, R10
+	mov  	R4, R8							; R8 = p_1
+	cmp   	R4, R1							; R4 = p_1, R1 = 0x0001
 	bne		end_if
 
-	; sum M to p (32 MSB)
-	add 	R2, R2, R4
-	adc     R3, R3, R5
+	; sum M to p (32 MSB) ---------------------------------
+	add 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
+	adc     R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
 
-	; if ((p & 0x1) == 1 && p_1 = 0)
+	; if ((p & 0x1) == 1 && p_1 = 0) ----------------------
 if_2:
-	cmp 	R11, R10
-	bne 	end_if
-	cmp  	R6, R9
+	cmp 	R5, R1   						; R5 = (p & 0x1), R4 = 0x01
+ 	bne 	end_if
+	cmp  	R4, R0							; R4 = p_1, R0 = 0x0000
 	bne		end_if
 
-	; sub M to p (32 MSB)
-	sub 	R2, R2, R4
-	sbc  	R3, R3, R5
+	; sub M to p (32 MSB) ---------------------------------
+	sub 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
+	sbc  	R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
 
 end_if:
-	; p_1 = p & 0x1
-	and  	R0, R0, R10
-	mov 	R6, R0
+	; p_1 = p & 0x1 ---------------------------------------
+	mov 	R8, R5							; R8 = p_1, R5 = p & 0x0001
 	
-	; p >>= 1
+	; p >>= 1, need to move p to R3..R0 so we can do the shift
+	mov     R0, R9							; R9 = p (LSB_0)			
+	mov     R1, R10							; R10 = p (LSB_1)
+	mov     R2, R11 						; R11 = p (MSB_0)
+	mov     R3, R12							; R12 = p (MSB_1)
+
+	mov 	R4, #0x00 & 0xFF                ; R4 = 0x0000 to use in adc
+	movt 	R4, #(0x00 >> 8) & 0xFF     
+	
+	; make the shift right by 1 ---------------------------
 	lsr  	R3, R3, #1
-	adc 	R2, R2, #0
+	adc 	R2, R2, R4
 	lsr  	R2, R2, #1
-	adc     R1, R1, #0
+	adc     R1, R1, R4
 	lsr  	R1, R1, #1
-	adc  	R0, R0, #0
+	adc  	R0, R0, R4
 	lsr  	R0, R0, #1
+
+	; move back p to R12..R9 -----------------------------
+	mov     R9, R0							; R0 = p (LSB_0)		
+	mov     R10, R1							; R1 = p (LSB_1)
+	mov     R11, R2 						; R2 = p (MSB_0)
+	mov     R12, R3 						; R3 = p (MSB_1)
 
 	b  		for_loop_mull
 
 end_loop_mull:
+	; move p (LSB) to R1..R0, only need the 32b part of p -
+	mov     R0, R9 							; R9 = p (LSB_0)			
+	mov     R1, R10 						; R10 = p (LSB_1)
 
-	; restore used registers from stack
+	; restore used registers from stack -------------------
+	pop  	R12
 	pop  	R11
 	pop  	R10
 	pop  	R9
-	pop  	R8
+	pop 	R8
 	pop  	R7
 	pop  	R6
 	pop  	R5
 	pop  	R4
 	pop		PC
+
 ; =============================================================================
+
 
 ; Seccao:    .data ============================================================
 ; Descricao: Guarda as variáveis globais com um valor inicial definido
+	.section .data
 
 seed:
 	.word 0x0001
@@ -300,9 +343,10 @@ result:
 
 ; Seccao:    .bss =============================================================
 ; Descricao: Guarda as variáveis globais sem valor inicial definido
+	.section .bss
 
 rand_number:
-	.word
+	.word rand_number
 ; =============================================================================
 
 
