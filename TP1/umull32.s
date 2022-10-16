@@ -57,7 +57,7 @@ for_loop_mull:
 	cmp 	R5, R2							; R5 = i, R2 = 32 (0x0020)
 	bhs 	end_loop_mull	
 
-	; don't enter if parts in case p MSBs != 0 ------------
+	; don't enter if parts in case p MSBs != 0, p must be 0 or 1 to enter ifs
 	mov   	R5, R10							; R10 = p (LSB_1) 
 	cmp 	R5, R0							; R0 = 0x0000
 	bne 	end_if
@@ -72,7 +72,7 @@ for_loop_mull:
 
 	; if ((p & 0x1) == 0 && p_1 == 1) ---------------------
 	mov  	R4, R9							; R9 = p (LSB_0) 
-	and  	R5, R4, R1 						; R9 (LSB of p) & (R1 = 0x0001)
+	and  	R5, R4, R1 						; R4 (LSB of p) & (R1 = 0x0001)
 	cmp  	R5, R0							; R5 = (p & 0x1), R0 = 0x0000 
 	bne 	if_2
 	mov  	R4, R8							; R8 = p_1
@@ -85,7 +85,7 @@ for_loop_mull:
 
 	; if ((p & 0x1) == 1 && p_1 = 0) ----------------------
 if_2:
-	cmp 	R5, R1   						; R5 = (p & 0x1), R4 = 0x01
+	cmp 	R5, R1   						; R5 = (p & 0x1), R1 = 0x01
  	bne 	end_if
 	cmp  	R4, R0							; R4 = p_1, R0 = 0x0000
 	bne		end_if
@@ -96,6 +96,8 @@ if_2:
 
 end_if:
 	; p_1 = p & 0x1 ---------------------------------------
+	mov  	R4, R9							; R9 = p (LSB_0) 
+	and  	R5, R4, R1 						; R4 (LSB of p) & (R1 = 0x0001)
 	mov 	R8, R5							; R8 = p_1, R5 = p & 0x0001
 	
 	; p >>= 1, need to move p to R3..R0 so we can do the shift
