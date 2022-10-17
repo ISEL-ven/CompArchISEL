@@ -293,10 +293,9 @@ com 32 bits, em que o parâmetro M corresponde ao multiplicando e o parâmetro m
 		R: A função encontra-se implementada nas linhas 176 a 256.
 		
 	b) Indique, em número de bytes, a quantidade de memória de código ocupada por essa implementação. Justifique a sua resposta.
-		R: 0x00DE - 0x007E = 0x60 (em decimal 96), a memória ocupada por esta implementação é de 24Bytes uma vez que
-		esta é calculada pelo número de linhas de código usadas para a execução desta função multiplicado pelo valor 
-		dois (cada instrução recorre a dois bites de memória) seguida pela divisão por 8 de modo a convertermos 
-		o valor em bytes (1 byte = 8 bits) (96*2/8).
+		R: 0x00DE - 0x007E = 0x60 (em decimal 96), a memória ocupada por esta implementação é de 96Bytes, o cálculo é obtido
+		contando o número de instruções usados na implementação da mesma, posto isto basta subtraír o valor da primeira 
+		instrução (0x00DE) com a última (0x007E).
 	
 2. Considere a definição da função srand que afeta a variável global seed com o valor de uma nova semente.
 	a) Implemente a definição da variável seed, definindo as secções necessárias. Justifique a sua resposta.
@@ -311,7 +310,14 @@ para gerar números pseudo-aleatórios entre zero e RAND_MAX. A constante RAND_M
 codificar numa variável com tipo uint32_t.
 	a) Indique duas possibilidades de implementação da constante RAND_MAX e discuta as suas vantagens e desvantagens 
 	quanto aos requisitos de memória.
-		R:?
+		R: A constante RAND_MAX pode ser implementada de várias maneiras, sendo duas delas : 
+			-> o carregamento direto para um registo atraves das instruções "mov" e "movt" que irão carregar respectivamente, o 
+			valor na parte baixa e alta do registo, e vão buscar o valor diretamente à constante em (.equ) ;
+			-> Carregamento  do valor através da memória, tendo assim  que escrever a constante, tal como é o caso de  .word, e determinar o endereço 
+			respetivo de modo a carregar através da instrução "ldr".
+			As vantagens e desvantagens incidem sobre o fator de que a instrução mov obriga ao uso de duas instruções para o 
+			carregamento do valor tanto na parte alta e na parte baixa, enquanto que o ldr carrega o valor na totalidade (16bits)
+			No entanto o ldr implica guardar o valor da constante em memória tendo que ser indexado para que o possamos  aceder.
 		
 	b) Implemente a função rand.
 		R: Esta implementação encontra-se descrita entre as linhas 122 a 168.
@@ -326,3 +332,5 @@ codificar numa variável com tipo uint32_t.
 		
 ====================================================================================================================================
 */
+
+			
