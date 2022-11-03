@@ -2,8 +2,8 @@
 ; Descricao: Programa de suporte a realizacao do 1o trabalho prático de
 ;            Arquitetura de Computadores.
 
-; Autor:     47190 Ana Gaspar
-;    		 45837 Miguel Santos
+; Autor:     47190 Teresa Gaspar
+;    		 45837 Miguel Queluz
 ;	    	 45824 Nuno Venâncio
 ;	   			
 ; Data:      05-10-2022
@@ -72,12 +72,12 @@ main:
 
 	bl  	srand 					; call to srand, nseed is in R0..R1
 
-for_loop:
+main_for_loop:
 	; check if i < N
 	mov  	R0, N & 0xFF
 	movt	R0, (0 >> 8) & 0xFF
 	cmp  	R0, R5
-	bhs     end_loop
+	bhs     main_end_loop
 
 	; rand_number = rand(), return will be in mem val of seed
 	bl 		rand
@@ -89,13 +89,14 @@ for_loop:
 	ldr  	R0, result_addr
 	ldr 	R0, [R0, R5]
 	cmp 	R0, R4
-	beq  	for_loop
+	beq  	main_for_loop
 
-end_loop:
+main_end_loop:
 
 	; restore used registers from stack
 	pop		R5
 	pop		R4
+	b 		.
 
 rand_number_addr:
 	.word rand_number
@@ -113,14 +114,10 @@ result_addr:
 srand:
 	; think this routine is unecessary could be done directly on main 
 	; R0 - LSbits of nseed, R1 - MSbits of nseed 
-	push	LR
-
 	ldr		R2, seed_addr			; get seed mem addr
 	str		R0, [R2, #0]			; get the value in seed mem addr (LSbits)
 	str		R1, [R2, #2]			; get the value in seed mem addr (MSbits)
 	
-	pop		PC
-
 
 ; Rotina:    rand -------------------------------------------------------------
 ; Descricao:
@@ -135,7 +132,7 @@ rand:
 	push 	R5
 	push 	R6
 
-	ldr		R0, seed_addr 			; get seed mem addr
+	ldr		R0, seed 				; get seed mem addr
 	ldr		R0, [R0, #0]            ; get the value in seed mem addr (LSbits)
 	ldr		R1, [R0, #2]			; get the value in seed mem addr (MSbits)
 
@@ -179,9 +176,6 @@ rand:
 	pop		R4
 	pop		PC
 
-seed_addr:
-	.word seed
-
 
 ; Rotina:    umull32 ----------------------------------------------------------
 ; Descricao:
@@ -224,7 +218,7 @@ umull32:
 	
 
 	; for loop ============================================
-for_loop_mull:
+umul_for_loop:
 
 	; assign R0 with 0x0000 -------------------------------
 	mov  	R0, 0x00 & 0xFF
@@ -240,20 +234,20 @@ for_loop_mull:
 
 	; if (i >= 32) break loop -----------------------------
 	cmp 	R5, R2							; R5 = i, R2 = 32 (0x0020)
-	bhs 	end_loop_mull	
+	bhs 	umul_end_loop	
 
 	; don't enter if parts in case p MSBs != 0 ------------
 	mov   	R5, R10							; R10 = p (LSB_1) 
 	cmp 	R5, R0							; R0 = 0x0000
-	bne 	end_if
+	bne 	umul_end_if
 
 	mov     R5, R11							; R11 = p (MSB_0)
 	cmp  	R5, R0							; R0 = 0x0000
-	bne  	end_if
+	bne  	umul_end_if
 
 	mov     R5, R12							; R12 = p (MSB_1)
 	cmp  	R5, R0							; R0 = 0x0000
-	bne  	end_if
+	bne  	umul_end_if
 
 	; if ((p & 0x1) == 0 && p_1 == 1) ---------------------
 	mov  	R4, R9							; R9 = p (LSB_0) 
@@ -262,7 +256,7 @@ for_loop_mull:
 	bne 	if_2
 	mov  	R4, R8							; R8 = p_1
 	cmp   	R4, R1							; R4 = p_1, R1 = 0x0001
-	bne		end_if
+	bne		umul_end_if
 
 	; sum M to p (32 MSB) ---------------------------------
 	add 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
@@ -271,15 +265,15 @@ for_loop_mull:
 	; if ((p & 0x1) == 1 && p_1 = 0) ----------------------
 if_2:
 	cmp 	R5, R1   						; R5 = (p & 0x1), R4 = 0x01
- 	bne 	end_if
+ 	bne 	umul_end_if
 	cmp  	R4, R0							; R4 = p_1, R0 = 0x0000
-	bne		end_if
+	bne		umul_end_if
 
 	; sub M to p (32 MSB) ---------------------------------
 	sub 	R11, R6, R11					; R11 = p (MSB_0), R6 = M (LSB)
 	sbc  	R12, R7, R12					; R12 = p (MSB_1), R7 = M (MSB)
 
-end_if:
+umul_end_if:
 	; p_1 = p & 0x1 ---------------------------------------
 	mov 	R8, R5							; R8 = p_1, R5 = p & 0x0001
 	
@@ -307,9 +301,9 @@ end_if:
 	mov     R11, R2 						; R2 = p (MSB_0)
 	mov     R12, R3 						; R3 = p (MSB_1)
 
-	b  		for_loop_mull
+	b  		umul_for_loop
 
-end_loop_mull:
+umul_end_loop:
 	; move p (LSB) to R1..R0, only need the 32b part of p -
 	mov     R0, R9 							; R9 = p (LSB_0)			
 	mov     R1, R10 						; R10 = p (LSB_1)
